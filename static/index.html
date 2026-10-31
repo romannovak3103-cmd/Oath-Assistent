@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Голосовой ассистент</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1d1d1b;--mut:#76746d;--acc:#2f5d50;--me:#e4ede9;--line:#e3e1da}
+@media(prefers-color-scheme:dark){:root{--bg:#161715;--card:#1f211e;--ink:#ecebe6;--mut:#8f8d85;--acc:#6fb39f;--me:#27352f;--line:#2e302c}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font:16px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;max-width:720px;margin:auto}
+header{padding:16px 20px;display:flex;justify-content:space-between;align-items:center}
+h1{font-size:18px;margin:0}label{font-size:13px;color:var(--mut);display:flex;gap:6px;align-items:center}
+#log{flex:1;overflow-y:auto;padding:0 20px;display:flex;flex-direction:column;gap:10px}
+.m{max-width:85%;padding:10px 14px;border-radius:16px;background:var(--card);border:1px solid var(--line);white-space:pre-wrap}
+.m.me{align-self:flex-end;background:var(--me);border-color:transparent}
+.m.sys{color:var(--mut);font-size:14px;background:none;border:none}
+footer{padding:14px 20px calc(14px + env(safe-area-inset-bottom));display:flex;gap:10px;align-items:center}
+input{flex:1;padding:13px 16px;border-radius:24px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit}
+button{border:none;border-radius:50%;width:48px;height:48px;background:var(--acc);color:#fff;font-size:20px;cursor:pointer}
+button.rec{animation:p 1s infinite;background:#c0392b}button.send{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+@keyframes p{50%{transform:scale(1.1)}}
+</style>
+</head>
+<body>
+<header><h1>Ассистент</h1><label><input type="checkbox" id="tts" checked style="flex:none">озвучивать</label></header>
+<div id="log"><div class="m sys">Нажмите на микрофон или напишите: «Напомни завтра в 10 позвонить Ивану», «Что у меня на этой неделе?», «Найди задачу про договор».</div></div>
+<footer>
+  <button id="mic" title="Говорить">🎤</button>
+  <input id="txt" placeholder="Напишите запрос…" autocomplete="off">
+  <button class="send" id="go">➤</button>
+</footer>
+<script src="voice.js"></script>
+<script>
+const $=id=>document.getElementById(id),log=$('log'),sid=crypto.randomUUID();
+let uid=localStorage.uid||(localStorage.uid=crypto.randomUUID());
+function add(t,c){const d=document.createElement('div');d.className='m '+c;d.textContent=t;log.append(d);log.scrollTop=log.scrollHeight;return d}
+async function send(t){
+  t=t.trim();if(!t)return;add(t,'me');$('txt').value='';const w=add('…','sys');
+  try{
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','X-User-Id':uid},body:JSON.stringify({message:t,session_id:sid})});
+    const j=await r.json();w.remove();
+    if(!r.ok){add(j.detail||'Ошибка сервера','sys');return}
+    add(j.reply,'bot');if($('tts').checked)Voice.speak(j.reply);
+  }catch(e){w.remove();add('Нет связи с сервером','sys')}
+}
+$('go').onclick=()=>send($('txt').value);
+$('txt').onkeydown=e=>{if(e.key==='Enter')send($('txt').value)};
+if(!Voice.supported){$('mic').style.display='none';add('Распознавание речи не поддерживается этим браузером (нужен Chrome/Edge/Safari). Работает текстовый ввод.','sys')}
+else{
+  const rec=Voice.createRecognizer({
+    onInterim:t=>{$('txt').value=t},
+    onFinal:send,
+    onState:on=>$('mic').classList.toggle('rec',on),
+    onError:e=>{if(e==='not-allowed')add('Разрешите доступ к микрофону','sys')}
+  });
+  $('mic').onclick=()=>rec.toggle();
+}
+</script>
+</body>
+</html>
